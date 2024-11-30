@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         YouTube去广告、设置最高画质
-// @namespace    
+// @namespace    https://github.com/admedg/YouTube/blob/main/YouTubeAD
 // @version      2024-11-30
 // @author       fhanser
 // @match        https://www.youtube.com/*
