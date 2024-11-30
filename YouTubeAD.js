@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         YouTube去广告、设置最高画质
+// @name         YouTube去广告、设置最高画质和字体样式
 // @version      2024-11-30
 // @author       fhanser
 // @match        https://www.youtube.com/*
@@ -10,94 +10,105 @@
 (function () {
     "use strict";
 
-    let video; // 视频元素变量
-
-    // 广告选择器
-    const cssSelectorArr = [
-        `#masthead-ad`, // 首页顶部横幅广告
-        `ytd-rich-item-renderer.style-scope.ytd-rich-grid-row #content:has(.ytd-display-ad-renderer)`, // 首页视频排版广告
-        `.video-ads.ytp-ad-module`, // 播放器底部广告
-        `tp-yt-paper-dialog:has(yt-mealbar-promo-renderer)`, // 播放页会员促销广告
-        `ytd-engagement-panel-section-list-renderer[target-id="engagement-panel-ads"]`, // 播放页右上方推荐广告
-        `#related #player-ads`, // 播放页评论区右侧推广广告
-        `#related ytd-ad-slot-renderer`, // 播放页评论区右侧视频排版广告
-        `ytd-ad-slot-renderer`, // 搜索页广告
-        `yt-mealbar-promo-renderer`, // 播放页会员推荐广告
-        `ytd-popup-container:has(a[href="/premium"])`, // 会员拦截广告
-        `ad-slot-renderer`, // M播放页第三方推荐广告
-        `ytm-companion-ad-renderer`, // M可跳过的视频广告链接处
+    const AD_SELECTORS = [
+        `#masthead-ad`,
+        `ytd-rich-item-renderer.style-scope.ytd-rich-grid-row #content:has(.ytd-display-ad-renderer)`,
+        `.video-ads.ytp-ad-module`,
+        `tp-yt-paper-dialog:has(yt-mealbar-promo-renderer)`,
+        `ytd-engagement-panel-section-list-renderer[target-id="engagement-panel-ads"]`,
+        `#related #player-ads`,
+        `#related ytd-ad-slot-renderer`,
+        `ytd-ad-slot-renderer`,
+        `yt-mealbar-promo-renderer`,
+        `ytd-popup-container:has(a[href="/premium"])`,
+        `ad-slot-renderer`,
+        `ytm-companion-ad-renderer`,
     ];
 
-    // 生成去广告的 CSS 样式并附加到 HTML
-    function generateRemoveADHTMLElement(id) {
-        let style = document.createElement(`style`);
-        (document.head || document.body).appendChild(style);
-        style.appendChild(
-            document.createTextNode(generateRemoveADCssText(cssSelectorArr))
-        );
+    const SKIP_AD_BUTTON_SELECTORS = [
+        `.ytp-ad-skip-button`,
+        `.ytp-skip-ad-button`,
+        `.ytp-ad-skip-button-modern`
+    ];
+
+    const FAST_FORWARD_AD_SPEED = 16; // 倍速播放广告
+
+    let video;
+    let player;
+
+    // 初始化去广告样式
+    function generateRemoveADCss() {
+        const style = document.createElement("style");
+
+        // 去广告样式
+        const adCss = AD_SELECTORS.map(selector => `${selector}{display:none!important}`).join(' ');
+
+        // 字体样式设置
+        const fontCss = `
+            body, p, span, div, a, li, h1, h2, h3, h4, h5, h6 {
+                font-weight: bold !important; /* 设置字体为粗体 */
+            }
+            /* 针对标题和链接的特别设置 */
+            h1, h2, h3, h4, h5, h6 {
+                font-weight: bold !important; /* 设置标题文本为粗体 */
+                color: #000 !important;
+            }
+            a {
+                text-decoration: none !important;
+                color: #1a73e8 !important;
+                font-weight: bold !important; /* 设置链接为粗体 */
+            }
+        `;
+
+        // 将去广告样式和字体样式合并
+        style.textContent = adCss + ' ' + fontCss;
+        document.head.appendChild(style);
     }
 
-    // 生成去广告的 CSS 文本
-    function generateRemoveADCssText(cssSelectorArr) {
-        cssSelectorArr.forEach((selector, index) => {
-            cssSelectorArr[index] = `${selector}{display:none!important}`;
-        });
-        return cssSelectorArr.join(` `);
-    }
-
-    // 跳过广告：点击跳过广告按钮，或者强制跳过
+    // 跳过广告
     function skipAd() {
-        const skipButton =
-              document.querySelector(`.ytp-ad-skip-button`) ||
-              document.querySelector(`.ytp-skip-ad-button`) ||
-              document.querySelector(`.ytp-ad-skip-button-modern`);
-
-        // 如果有跳过广告的按钮，点击它
+        const skipButton = SKIP_AD_BUTTON_SELECTORS.map(selector => document.querySelector(selector)).find(btn => btn);
         if (skipButton) {
             skipButton.click();
-        } else {
-            // 如果广告按钮没出现，强制加速播放广告
-            const player = new YT.Player("movie_player"); // 使用YT.Player API来控制播放速率
-            player.setPlaybackRate(16); // 强制16倍速播放广告
+        } else if (player) {
+            player.setPlaybackRate(FAST_FORWARD_AD_SPEED); // 快进广告
         }
     }
 
     // 自动播放广告后的视频
     function playAfterAd() {
-        if (video && video.paused && video.currentTime < 1) {
-            video.play(); // 如果视频还未播放，就开始播放
+        if (video && video.paused && video.currentTime === 0) {
+            video.play();
         }
     }
 
     // 设置最高画质
     function setHighestQuality() {
-        if (window.YT && window.YT.Player) {
-            const player = new YT.Player("movie_player");
+        if (player) {
             const availableQualities = player.getAvailableQualityLevels();
             const highestQuality = availableQualities[availableQualities.length - 1];
             player.setPlaybackQuality(highestQuality);
         }
     }
 
-    // 页面加载前立即移除广告
-    generateRemoveADHTMLElement("yt-ad-block");
-
-    // 监听页面加载并设置画质和修改布局
+    // 页面加载后立即执行的初始化逻辑
     window.addEventListener("load", () => {
-        video = document.querySelector('video'); // 获取视频元素
-        setHighestQuality(); // 设置最高画质
-        playAfterAd(); // 自动播放视频（广告播放完后）
+        video = document.querySelector('video');
+        player = new YT.Player('movie_player');
+        setHighestQuality();
+        playAfterAd();
     });
 
-    // 使用 MutationObserver 监听广告变化并跳过广告
+    // 监听广告变化并跳过广告
     const observer = new MutationObserver(() => {
-        skipAd(); // 检测到广告后跳过广告
+        skipAd();
     });
 
-    // 监听广告相关的 DOM 变化
     observer.observe(document.body, { childList: true, subtree: true });
 
-    // 强制跳过广告并播放视频
-    setInterval(skipAd, 500); // 每隔500ms检查一次广告并跳过
-})();
+    // 每隔500ms检查广告
+    setInterval(skipAd, 500);
 
+    // 页面加载前移除广告并设置字体样式
+    generateRemoveADCss();
+})();
